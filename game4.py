@@ -31,8 +31,8 @@ except:
         BATTLE_FONT = pygame.font.Font(None, 20)
 
 # 常量定义
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 640
+SCREEN_WIDTH = 900  # 修改为900
+SCREEN_HEIGHT = 760  # 修改为760
 GRID_SIZE = 40
 GRID_WIDTH = SCREEN_WIDTH // GRID_SIZE
 GRID_HEIGHT = (SCREEN_HEIGHT - 40) // GRID_SIZE  # 为底部信息栏留出空间
@@ -64,6 +64,7 @@ class GameState(Enum):
     GAME_OVER = 3
     LEVEL_COMPLETE = 4
     SKILL_SELECT = 5  # 新增技能选择状态
+    ITEM_SELECT = 6  # 新增物品选择状态
 
 
 # 装备类型枚举
@@ -526,43 +527,158 @@ class MenuSystem:
         self.selected_skill_index = 0
 
     def draw_battle_menu(self, battle_system):
-        # 绘制战斗动画区域
-        pygame.draw.rect(self.screen, DARK_GRAY, (0, 0, 600, 400))
+        """绘制战斗主菜单和子菜单"""
+        # --- 左侧区域 (0-600px) ---
+        left_width = 600
+        left_height = 720
+        left_x = 0
+        left_y = 0
 
-        # 绘制战斗选项区域
-        pygame.draw.rect(self.screen, GRAY, (0, 400, 600, 200))  # 增加到200px高度
+        # --- 右侧区域 (600-900px) 用于日志 ---
+        right_width = 300
+        right_height = 720
+        right_x = 600
+        right_y = 0
 
-        # 绘制选项（垂直排列）
+        # --- 左侧上半部分：战斗动画区 (0-400px 高度) ---
+        battle_animation_area = pygame.Rect(left_x, left_y, left_width, 400)
+        pygame.draw.rect(self.screen, BLACK, battle_animation_area)
+        pygame.draw.rect(self.screen, WHITE, battle_animation_area, 2)
+
+        # 显示怪物图形和血量 (示例)
+        if battle_system and battle_system.monster:
+            monster = battle_system.monster
+            monster_x = left_x + (left_width - monster.size) // 2
+            monster_y = left_y + (400 - monster.size) // 2
+            pygame.draw.rect(self.screen, RED, (monster_x, monster_y, monster.size, monster.size))  # 怪物图形
+
+            health_text = self.battle_font.render(f"血量: {monster.current_health}/{monster.max_health}", True, WHITE)
+            self.screen.blit(health_text, (left_x + (left_width - health_text.get_width()) // 2, left_y + 400 - 30))
+
+            # 显示怪物DEBUFF
+            if monster.debuffs:
+                debuff_y = left_y + 10
+                for debuff in monster.debuffs.values():
+                    debuff_text = self.battle_font.render(f"{debuff.name}({debuff.duration})", True, RED)
+                    self.screen.blit(debuff_text, (left_x + 10, debuff_y))
+                    debuff_y += 25
+
+            # 显示怪物个数
+            monsters_count = len(
+                [m for m in battle_system.player.__class__().monsters if m.current_health > 0])  # 这里需要能访问到所有怪物列表
+            # 简化处理，假设 battle_system 能访问到游戏管理器或怪物列表
+            # monsters_count = getattr(battle_system, 'total_monsters', 1) # 需要在 BattleSystem 初始化时设置
+            # if monsters_count > 1:
+            #     count_text = self.battle_font.render(f"当前有 {monsters_count} 只怪物", True, WHITE)
+            #     self.screen.blit(count_text, (left_x + (left_width - count_text.get_width()) // 2, left_y + 10))
+
+        # --- 左侧下半部分：分割成左右两块 ---
+        # 左半块 (0-300px): 主菜单选项
+        main_menu_area = pygame.Rect(left_x, left_y + 400, 300, 140)  # 140px 高度
+        pygame.draw.rect(self.screen, GRAY, main_menu_area)
+        pygame.draw.rect(self.screen, WHITE, main_menu_area, 2)
+
+        # 右半块 (300-600px): 子菜单选项
+        sub_menu_area = pygame.Rect(left_x + 300, left_y + 400, 300, 140)  # 140px 高度
+        pygame.draw.rect(self.screen, DARK_GRAY, sub_menu_area)
+        pygame.draw.rect(self.screen, WHITE, sub_menu_area, 2)
+
+        # --- 绘制左侧主菜单选项 ---
         for i, option in enumerate(self.battle_menu_options):
             color = YELLOW if i == self.selected else WHITE
             text = self.battle_font.render(option, True, color)
-            # 垂直排列，每个选项间隔50px
-            self.screen.blit(text, (50, 420 + i * 50))
-            # 添加三角标识
+            # 垂直排列，居中显示
+            text_x = left_x + 150 - text.get_width() // 2
+            text_y = left_y + 420 + i * 35  # 间隔 35px
+            self.screen.blit(text, (text_x, text_y))
+            # --- 修改: 添加向左的三角形指示器 ---
             if i == self.selected:
                 triangle_points = [
-                    (30, 420 + i * 50 + text.get_height() // 2),
-                    (40, 420 + i * 50),
-                    (40, 420 + i * 50 + text.get_height())
+                    (text_x - 15, text_y + text.get_height() // 2),  # 顶点
+                    (text_x - 5, text_y),  # 底左
+                    (text_x - 5, text_y + text.get_height())  # 底右
                 ]
                 pygame.draw.polygon(self.screen, YELLOW, triangle_points)
 
-        # 绘制日志区域
-        pygame.draw.rect(self.screen, BLACK, (0, 600, 600, 40))
-        pygame.draw.rect(self.screen, WHITE, (0, 600, 600, 40), 2)
+        # --- 绘制右侧子菜单选项 (根据主菜单选择) ---
+        sub_options = []
+        sub_selected_index = getattr(self, 'sub_selected', 0)  # 假设有一个 sub_selected 属性跟踪子菜单选择
+        if self.selected == 1:  # 技能
+            sub_options = [skill.name for skill in self.player.skills]
+        elif self.selected == 2:  # 物品
+            from ..entities import Item
+            sub_options = [item.name for item in self.player.inventory if isinstance(item, Item)]
 
-        # 绘制日志消息
-        if battle_system.log_messages:
-            latest_message = battle_system.log_messages[-1]  # 显示最新消息
-            text = self.battle_font.render(latest_message, True, WHITE)
-            self.screen.blit(text, (10, 610))
+        if sub_options:
+            for i, option in enumerate(sub_options):
+                color = YELLOW if i == sub_selected_index else WHITE
+                text = self.battle_font.render(option, True, color)
+                # 垂直排列，居中显示在右半块
+                text_x = left_x + 450 - text.get_width() // 2  # 300 + 150
+                text_y = left_y + 420 + i * 35
+                self.screen.blit(text, (text_x, text_y))
+                # 为子菜单也添加指示器 (例如向左)
+                if i == sub_selected_index:
+                    triangle_points = [
+                        (text_x - 15, text_y + text.get_height() // 2),  # 顶点
+                        (text_x - 5, text_y),  # 底左
+                        (text_x - 5, text_y + text.get_height())  # 底右
+                    ]
+                pygame.draw.polygon(self.screen, YELLOW, triangle_points)
+        else:
+            # 如果没有子选项，可以显示提示
+            if self.selected == 1:  # 技能被选中但无技能（不太可能）
+                no_skill_text = self.battle_font.render("无可用技能", True, WHITE)
+                self.screen.blit(no_skill_text, (left_x + 450 - no_skill_text.get_width() // 2, left_y + 450))
+            elif self.selected == 2:  # 物品被选中但无物品
+                no_item_text = self.battle_font.render("无可用物品", True, WHITE)
+                self.screen.blit(no_item_text, (left_x + 450 - no_item_text.get_width() // 2, left_y + 450))
+            # "战斗" 和 "逃跑" 被选中时，子菜单区域保持空白即可
+
+        # --- 左侧底部：玩家属性区 (540-700px 高度) ---
+        player_stats_area = pygame.Rect(left_x, left_y + 540, left_width, 160)
+        pygame.draw.rect(self.screen, GRAY, player_stats_area)
+        pygame.draw.rect(self.screen, WHITE, player_stats_area, 2)
+
+        # 显示玩家属性 (示例)
+        if battle_system and battle_system.player:
+            player = battle_system.player
+            player_stats = [
+                f"剩余体力: {player.current_health}/{player.get_total_health()}",
+                f"攻击力: {player.get_total_attack()}",
+                f"防御力: {player.get_total_defense()}",
+                f"技力: {player.current_energy}/{player.get_total_energy()}"
+            ]
+            for i, stat in enumerate(player_stats):
+                text = self.battle_font.render(stat, True, WHITE)
+                self.screen.blit(text, (left_x + 20, left_y + 550 + i * 30))
+
+            # 显示玩家BUFF
+            if player.buffs:
+                buff_y = left_y + 550
+                for buff in player.buffs.values():
+                    buff_text = self.battle_font.render(f"{buff.name}({buff.duration})", True, GREEN)
+                    self.screen.blit(buff_text, (left_x + 300, buff_y))  # 显示在右侧
+                    buff_y += 25
+
+        # --- 右侧区域：日志区 ---
+        log_area = pygame.Rect(right_x, right_y, right_width, right_height)
+        pygame.draw.rect(self.screen, LIGHT_GREEN, log_area)
+        pygame.draw.rect(self.screen, WHITE, log_area, 2)
+
+        # 显示战斗日志 (最新消息在最上方)
+        if battle_system and battle_system.log_messages:
+            log_messages = battle_system.log_messages[-15:]  # 显示最多15条
+            for i, message in enumerate(log_messages):
+                text = self.battle_font.render(message, True, BLACK)
+                self.screen.blit(text, (right_x + 10, right_y + 10 + i * 30))
 
     def draw_skill_menu(self, battle_system):
         # 绘制技能选择菜单
         pygame.draw.rect(self.screen, DARK_GRAY, (0, 0, 600, 400))
 
-        # 绘制技能选项区域
-        pygame.draw.rect(self.screen, GRAY, (0, 400, 600, 200))
+        # 绘制技能选项区域（保证160px高度）
+        pygame.draw.rect(self.screen, GRAY, (0, 400, 600, 140))
 
         # 绘制标题
         title = self.battle_font.render("选择技能", True, WHITE)
@@ -573,25 +689,78 @@ class MenuSystem:
         for i, option in enumerate(skill_options):
             color = YELLOW if i == self.selected else WHITE
             text = self.battle_font.render(option, True, color)
-            self.screen.blit(text, (50, 450 + i * 40))
+            self.screen.blit(text, (50, 450 + i * 30))
             # 添加三角标识
             if i == self.selected:
                 triangle_points = [
-                    (30, 450 + i * 40 + text.get_height() // 2),
-                    (40, 450 + i * 40),
-                    (40, 450 + i * 40 + text.get_height())
+                    (30, 450 + i * 30 + text.get_height() // 2),
+                    (40, 450 + i * 30),
+                    (40, 450 + i * 30 + text.get_height())
                 ]
                 pygame.draw.polygon(self.screen, YELLOW, triangle_points)
 
         # 绘制日志区域
-        pygame.draw.rect(self.screen, BLACK, (0, 600, 600, 40))
-        pygame.draw.rect(self.screen, WHITE, (0, 600, 600, 40), 2)
+        pygame.draw.rect(self.screen, BLACK, (0, 540, 600, 180))
+        pygame.draw.rect(self.screen, WHITE, (0, 540, 600, 180), 2)
 
         # 绘制日志消息
         if battle_system.log_messages:
-            latest_message = battle_system.log_messages[-1]
-            text = self.battle_font.render(latest_message, True, WHITE)
-            self.screen.blit(text, (10, 610))
+            for i, message in enumerate(battle_system.log_messages[-5:]):  # 显示最多5条
+                text = self.battle_font.render(message, True, WHITE)
+                self.screen.blit(text, (10, 550 + i * 30))
+
+    def draw_item_menu(self, battle_system):
+        # 绘制物品选择菜单
+        pygame.draw.rect(self.screen, DARK_GRAY, (0, 0, 600, 400))
+
+        # 绘制物品选项区域（保证160px高度）
+        pygame.draw.rect(self.screen, GRAY, (0, 400, 600, 140))
+
+        # 绘制标题
+        title = self.battle_font.render("选择物品", True, WHITE)
+        self.screen.blit(title, (50, 410))
+
+        # 显示道具列表
+        items = [item for item in self.player.inventory if isinstance(item, Item)]
+        if not items:
+            no_item_text = self.battle_font.render("没有道具", True, WHITE)
+            self.screen.blit(no_item_text, (50, 450))
+        else:
+            for i, item in enumerate(items[:6]):  # 最多显示6个道具
+                color = YELLOW if i == self.selected else WHITE
+                text = self.battle_font.render(f"{item.name}", True, color)
+                self.screen.blit(text, (50, 450 + i * 30))
+                # 添加三角标识
+                if i == self.selected:
+                    triangle_points = [
+                        (30, 450 + i * 30 + text.get_height() // 2),
+                        (40, 450 + i * 30),
+                        (40, 450 + i * 30 + text.get_height())
+                    ]
+                    pygame.draw.polygon(self.screen, YELLOW, triangle_points)
+
+        # 返回选项
+        return_color = WHITE
+        return_text = self.battle_font.render("返回", True, return_color)
+        self.screen.blit(return_text, (50, 450 + min(len(items), 6) * 30))
+        # 添加三角标识
+        if self.selected >= len(items):
+            triangle_points = [
+                (30, 450 + min(len(items), 6) * 30 + return_text.get_height() // 2),
+                (40, 450 + min(len(items), 6) * 30),
+                (40, 450 + min(len(items), 6) * 30 + return_text.get_height())
+            ]
+            pygame.draw.polygon(self.screen, YELLOW, triangle_points)
+
+        # 绘制日志区域
+        pygame.draw.rect(self.screen, BLACK, (0, 540, 600, 180))
+        pygame.draw.rect(self.screen, WHITE, (0, 540, 600, 180), 2)
+
+        # 绘制日志消息
+        if battle_system.log_messages:
+            for i, message in enumerate(battle_system.log_messages[-5:]):  # 显示最多5条
+                text = self.battle_font.render(message, True, WHITE)
+                self.screen.blit(text, (10, 550 + i * 30))
 
     def draw_main_menu(self):
         # 绘制半透明背景
@@ -743,7 +912,7 @@ class MenuSystem:
                 text = self.small_font.render(eq.name, True, YELLOW)
                 self.screen.blit(text, (320, 140 + i * 30))
 
-    def draw_item_menu(self):
+    def draw_item_menu_main(self):
         # 绘制半透明背景
         s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         s.set_alpha(128)
@@ -795,15 +964,63 @@ class MenuSystem:
         self.screen.blit(text, (box_x + 20, box_y + 20))
 
     def handle_battle_input(self, keys):
+        """处理战斗界面的输入，支持主菜单和子菜单导航"""
+        # 确保 sub_selected 属性存在
+        if not hasattr(self, 'sub_selected'):
+            self.sub_selected = 0
+
+        # 获取当前主选项和子选项
+        main_option_count = len(self.battle_menu_options)
+        # 确定子选项数量
+        sub_options = []
+        if self.selected == 1:  # 技能
+            sub_options = self.player.skills
+        elif self.selected == 2:  # 物品
+            sub_options = [item for item in self.player.inventory if isinstance(item, ItemType.__bases__[0])]  # 简化判断
+            # 更准确的判断
+            sub_options = [item for item in self.player.inventory if isinstance(item, Item)]
+
+        sub_option_count = len(sub_options)
+
+        # --- 导航逻辑 ---
         if keys[pygame.K_UP]:
-            self.selected = (self.selected - 1) % len(self.battle_menu_options)
+            if sub_option_count > 0 and (self.selected == 1 or self.selected == 2):
+                # 如果有子菜单且当前主选项是技能或物品，则导航子菜单
+                self.sub_selected = (self.sub_selected - 1) % sub_option_count
+            else:
+                # 否则导航主菜单
+                self.selected = (self.selected - 1) % main_option_count
+                self.sub_selected = 0  # 切换主菜单时重置子菜单选择
             pygame.time.wait(150)
+
         elif keys[pygame.K_DOWN]:
-            self.selected = (self.selected + 1) % len(self.battle_menu_options)
+            if sub_option_count > 0 and (self.selected == 1 or self.selected == 2):
+                # 如果有子菜单且当前主选项是技能或物品，则导航子菜单
+                self.sub_selected = (self.sub_selected + 1) % sub_option_count
+            else:
+                # 否则导航主菜单
+                self.selected = (self.selected + 1) % main_option_count
+                self.sub_selected = 0  # 切换主菜单时重置子菜单选择
             pygame.time.wait(150)
-        elif keys[pygame.K_RETURN]:
-            self.battle_action = self.battle_menu_options[self.selected]
+
+        elif keys[pygame.K_RETURN] or keys[pygame.K_SPACE]:  # 支持回车或空格确认
+            if sub_option_count > 0 and (self.selected == 1 or self.selected == 2):
+                # 如果有子菜单且当前主选项是技能或物品，则确认子菜单选择
+                if self.selected == 1:  # 技能
+                    self.battle_action = ("skill", self.player.skills[self.sub_selected])
+                elif self.selected == 2:  # 物品
+                    from ..entities import Item
+                    items = [item for item in self.player.inventory if isinstance(item, Item)]
+                    self.battle_action = ("item", items[self.sub_selected])
+            else:
+                # 否则确认主菜单选择
+                self.battle_action = self.battle_menu_options[self.selected]
+
+            # 重置选择状态，为下一次选择做准备
+            # self.selected = 0 # 不重置主选择，保持当前选择高亮
+            # self.sub_selected = 0 # 不重置子选择，保持当前子选择高亮（如果适用）
             return self.battle_action
+
         return None
 
     def handle_skill_input(self, keys):
@@ -820,6 +1037,30 @@ class MenuSystem:
             else:
                 # 返回
                 return "返回"
+        return None
+
+    def handle_item_input(self, keys, battle_system):
+        items = [item for item in self.player.inventory if isinstance(item, Item)]
+        max_selection = len(items)
+
+        if keys[pygame.K_UP]:
+            self.selected = (self.selected - 1) if self.selected > 0 else max_selection
+            pygame.time.wait(150)
+        elif keys[pygame.K_DOWN]:
+            self.selected = (self.selected + 1) if self.selected < max_selection else 0
+            pygame.time.wait(150)
+        elif keys[pygame.K_RETURN]:
+            if self.selected < len(items):
+                # 使用道具
+                item = items[self.selected]
+                result = self.player.use_item(item)
+                if item in self.player.inventory:
+                    self.player.inventory.remove(item)
+                battle_system.add_log(result)
+                return "used"
+            else:
+                # 返回
+                return "return"
         return None
 
     def handle_main_menu_input(self, keys):
@@ -1089,44 +1330,10 @@ class Game:
                 self.menu_system.current_menu = "skill"
 
             elif action == "物品":
-                # 打开物品菜单
-                items = [item for item in self.player.inventory if isinstance(item, Item)]
-                if items:
-                    # 使用第一个物品作为示例
-                    item = items[0]
-                    result = self.player.use_item(item)
-                    if item in self.player.inventory:
-                        self.player.inventory.remove(item)
-                    self.battle_system.add_log(result)
-
-                    # 更新BUFF/DEBUFF效果
-                    player_effects = self.player.update_buffs_debuffs()
-                    for effect in player_effects:
-                        self.battle_system.add_log(effect)
-
-                    monster_effects = self.battle_system.monster.update_buffs_debuffs()
-                    for effect in monster_effects:
-                        self.battle_system.add_log(effect)
-
-                    # 检查是否死亡
-                    if self.player.current_health <= 0:
-                        self.state = GameState.GAME_OVER
-                        return
-                    if self.battle_system.monster.current_health <= 0:
-                        self.handle_battle_victory()
-                        return
-
-                    # 怪物攻击
-                    self.battle_system.add_log("怪物回合开始")
-                    game_over = self.battle_system.monster_attack()
-                    if game_over:
-                        self.state = GameState.GAME_OVER
-                        return
-
-                    self.battle_system.add_log("玩家回合开始")
-                else:
-                    self.battle_system.add_log("没有可用的道具！")
+                # 进入物品选择状态
+                self.state = GameState.ITEM_SELECT
                 self.menu_system.selected = 0
+                self.menu_system.current_menu = "item_battle"
 
             elif action == "逃跑":
                 if random.random() < 0.5:
@@ -1235,6 +1442,43 @@ class Game:
                 self.menu_system.current_menu = "battle"
                 self.menu_system.selected = 0
 
+    def update_item_select(self):
+        keys = pygame.key.get_pressed()
+        result = self.menu_system.handle_item_input(keys, self.battle_system)
+
+        if result:
+            if result == "used":
+                # 更新BUFF/DEBUFF效果
+                player_effects = self.player.update_buffs_debuffs()
+                for effect in player_effects:
+                    self.battle_system.add_log(effect)
+
+                monster_effects = self.battle_system.monster.update_buffs_debuffs()
+                for effect in monster_effects:
+                    self.battle_system.add_log(effect)
+
+                # 检查是否死亡
+                if self.player.current_health <= 0:
+                    self.state = GameState.GAME_OVER
+                    return
+                if self.battle_system.monster.current_health <= 0:
+                    self.handle_battle_victory()
+                    return
+
+                # 怪物攻击
+                self.battle_system.add_log("怪物回合开始")
+                game_over = self.battle_system.monster_attack()
+                if game_over:
+                    self.state = GameState.GAME_OVER
+                    return
+
+                self.battle_system.add_log("玩家回合开始")
+
+            # 返回战斗菜单
+            self.state = GameState.BATTLE
+            self.menu_system.current_menu = "battle"
+            self.menu_system.selected = 0
+
     def handle_battle_victory(self):
         # 移除被击败的怪物
         self.monsters.remove(self.battle_system.monster)
@@ -1318,6 +1562,8 @@ class Game:
                 self.exit_locked = False
         elif self.state == GameState.SKILL_SELECT:
             self.update_skill_select()
+        elif self.state == GameState.ITEM_SELECT:
+            self.update_item_select()
 
     def draw(self):
         # 绘制背景
@@ -1376,6 +1622,9 @@ class Game:
         elif self.state == GameState.SKILL_SELECT:
             self.menu_system.draw_skill_menu(self.battle_system)
 
+        elif self.state == GameState.ITEM_SELECT:
+            self.menu_system.draw_item_menu(self.battle_system)
+
         elif self.state == GameState.GAME_OVER:
             # 显示游戏结束信息
             game_over_text = self.large_font.render("游戏结束", True, RED)
@@ -1394,22 +1643,22 @@ class Game:
             elif self.menu_system.current_menu == "equipment":
                 self.menu_system.draw_equipment_menu()
             elif self.menu_system.current_menu == "item":
-                self.menu_system.draw_item_menu()
+                self.menu_system.draw_item_menu_main()
 
         # 绘制消息
         if self.menu_system.show_message and self.menu_system.message_timer > 0:
             self.menu_system.draw_message(self.menu_system.show_message)
 
     def draw_battle_interface(self):
-        # 左侧区域（600px × 640px）
+        # 左侧区域（600px × 720px）
         left_width = 600
-        left_height = 640
+        left_height = 720
         left_x = 0
         left_y = 0
 
-        # 右侧区域（200px × 640px）
-        right_width = 200
-        right_height = 640
+        # 右侧区域（300px × 720px）
+        right_width = 300
+        right_height = 720
         right_x = 600
         right_y = 0
 
@@ -1442,8 +1691,8 @@ class Game:
             count_text = self.battle_font.render(f"当前有 {monsters_count} 只怪物", True, WHITE)
             self.screen.blit(count_text, (left_x + (left_width - count_text.get_width()) // 2, left_y + 10))
 
-        # 左侧区域：玩家属性区（600px × 200px）（使用较小字体）
-        player_stats_area = pygame.Rect(left_x, left_y + 400, left_width, 200)
+        # 左侧区域：玩家属性区（600px × 140px）（使用较小字体）
+        player_stats_area = pygame.Rect(left_x, left_y + 400, left_width, 140)
         pygame.draw.rect(self.screen, GRAY, player_stats_area)
         pygame.draw.rect(self.screen, WHITE, player_stats_area, 2)
 
@@ -1456,7 +1705,7 @@ class Game:
         ]
         for i, stat in enumerate(player_stats):
             text = self.battle_font.render(stat, True, WHITE)
-            self.screen.blit(text, (left_x + 20, left_y + 420 + i * 40))  # 调整行间距
+            self.screen.blit(text, (left_x + 20, left_y + 420 + i * 30))  # 调整行间距
 
         # 显示玩家BUFF（使用较小字体）
         if self.player.buffs:
@@ -1466,8 +1715,8 @@ class Game:
                 self.screen.blit(buff_text, (left_x + 300, buff_y))
                 buff_y += 25
 
-        # 左侧区域：战斗选项区（600px × 200px）（垂直排列选项）
-        battle_options_area = pygame.Rect(left_x, left_y + 600, left_width, 40)
+        # 左侧区域：战斗选项区（600px × 160px）（垂直排列选项，保证160px高度）
+        battle_options_area = pygame.Rect(left_x, left_y + 540, left_width, 160)
         pygame.draw.rect(self.screen, DARK_GRAY, battle_options_area)
         pygame.draw.rect(self.screen, WHITE, battle_options_area, 2)
 
@@ -1476,25 +1725,25 @@ class Game:
         for i, option in enumerate(options):
             color = RED if i == self.menu_system.selected else WHITE
             text = self.battle_font.render(option, True, color)
-            # 垂直排列，每个选项间隔50px
-            self.screen.blit(text, (left_x + 50, left_y + 610 + i * 50))
+            # 垂直排列，每个选项间隔40px
+            self.screen.blit(text, (left_x + 50, left_y + 550 + i * 40))
             # 添加三角标识
             if i == self.menu_system.selected:
                 triangle_points = [
-                    (left_x + 30, left_y + 610 + i * 50 + text.get_height() // 2),
-                    (left_x + 40, left_y + 610 + i * 50),
-                    (left_x + 40, left_y + 610 + i * 50 + text.get_height())
+                    (left_x + 30, left_y + 550 + i * 40 + text.get_height() // 2),
+                    (left_x + 40, left_y + 550 + i * 40),
+                    (left_x + 40, left_y + 550 + i * 40 + text.get_height())
                 ]
                 pygame.draw.polygon(self.screen, YELLOW, triangle_points)
 
-        # 右侧区域：日志区（200px × 640px）
-        log_area = pygame.Rect(right_x, right_y, right_width, right_height)
+        # 右侧区域：日志区（300px × 720px）
+        log_area = pygame.Rect(right_x, right_y, right_width, 720)
         pygame.draw.rect(self.screen, LIGHT_GREEN, log_area)
         pygame.draw.rect(self.screen, WHITE, log_area, 2)
 
         # 显示战斗日志（最新消息在最上方）（使用较小字体）
         log_messages = self.battle_system.log_messages[::-1]  # 反转列表，最新消息在最上方
-        for i, message in enumerate(log_messages[:10]):  # 最多显示10条日志
+        for i, message in enumerate(log_messages[:15]):  # 最多显示15条日志
             text = self.battle_font.render(message, True, BLACK)
             self.screen.blit(text, (right_x + 10, right_y + 10 + i * 30))
 
@@ -1531,6 +1780,10 @@ class Game:
                 # 技能选择状态已经在update_skill_select中处理
                 pass
 
+            elif self.state == GameState.ITEM_SELECT:
+                # 物品选择状态已经在update_item_select中处理
+                pass
+
             elif self.state == GameState.GAME_OVER:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
@@ -1556,6 +1809,8 @@ class Game:
                 self.update_battle()
             elif self.state == GameState.SKILL_SELECT:
                 self.update_skill_select()
+            elif self.state == GameState.ITEM_SELECT:
+                self.update_item_select()
 
             self.draw()
             pygame.display.flip()

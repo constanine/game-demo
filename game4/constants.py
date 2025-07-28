@@ -1,0 +1,49 @@
+# game4/constants.py
+import os
+
+# 屏幕设置
+SCREEN_WIDTH = 900
+SCREEN_HEIGHT = 760
+STATUS_BAR_HEIGHT = 40
+GAME_AREA_HEIGHT = SCREEN_HEIGHT - STATUS_BAR_HEIGHT
+
+# 网格设置
+GRID_SIZE = 40
+MAP_ROWS = GAME_AREA_HEIGHT // GRID_SIZE
+MAP_COLS = SCREEN_WIDTH // GRID_SIZE
+
+# 颜色定义
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GRAY = (128, 128, 128)
+DARK_GRAY = (64, 64, 64)
+YELLOW = (255, 255, 0)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+LIGHT_BLUE = (173, 216, 230)
+BROWN = (139, 69, 19)
+PURPLE = (128, 0, 128)
+# 颜色定义 (如果 constants.py 中没有)
+GRASS_GREEN = (34, 139, 34) # 或者你喜欢的其他草绿色
+
+# 字体设置
+FONT_PATH = os.path.join(os.path.dirname(__file__), "assets", "fonts", "simhei.ttf")
+FONT_SIZE = 18
+LARGE_FONT_SIZE = 24
+
+# 游戏平衡参数
+PLAYER_MOVE_SPEED = 0.5  # 每帧移动的网格数
+ESCAPE_SUCCESS_RATE = 0.5  # 逃跑成功率
+
+# 怪物生成参数
+NORMAL_MONSTER_COUNT = (7, 10)
+ELITE_MONSTER_COUNT = (2, 3)
+BOSS_MONSTER_COUNT = 1
+
+# 战斗界面设置
+BATTLE_LEFT_WIDTH = 600
+BATTLE_RIGHT_WIDTH = 300
+BATTLE_ANIMATION_HEIGHT = 400
+BATTLE_PLAYER_INFO_HEIGHT = 200
+BATTLE_MENU_HEIGHT = 160
